@@ -93,29 +93,41 @@ function jkmccfw_clean_wp_data($wpdb) {
     }
 }
 
-// Cleanup WooCommerce data
 function jkmccfw_clean_woo_data($wpdb) {
     try {
         // Remove WooCommerce session data
         $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_wc_session_%'");
-        $wpdb->query("DELETE FROM {$wpdb->prefix}woocommerce_sessions WHERE session_expiry < UNIX_TIMESTAMP(NOW())");
 
-        // Remove old WooCommerce orders
+        // Remove WooCommerce orders older than 180 days
         $wpdb->query("DELETE FROM {$wpdb->posts} WHERE post_type = 'shop_order' AND post_status IN ('wc-pending', 'wc-cancelled', 'wc-failed') AND post_date < NOW() - INTERVAL 180 DAY");
 
-        // Remove WooCommerce cart data
-        $wpdb->query("TRUNCATE TABLE {$wpdb->prefix}wc_cart_tracking");
+        // Check if 'wp_wc_cart_tracking' table exists before truncating
+        $cart_tracking_table = $wpdb->prefix . "wc_cart_tracking";
+        if ($wpdb->get_var("SHOW TABLES LIKE '$cart_tracking_table'") == $cart_tracking_table) {
+            $wpdb->query("TRUNCATE TABLE $cart_tracking_table");
+        }
 
-        // Remove failed webhooks
-        $wpdb->query("DELETE FROM {$wpdb->prefix}wc_webhooks WHERE delivery_status = 'failed' AND date_created < NOW() - INTERVAL 90 DAY");
+        // Check if 'wp_wc_webhooks' table exists
+        $webhooks_table = $wpdb->prefix . "wc_webhooks";
+        if ($wpdb->get_var("SHOW TABLES LIKE '$webhooks_table'") == $webhooks_table) {
+            // Check if the 'delivery_status' column exists before using it
+            $columns = $wpdb->get_col("DESCRIBE $webhooks_table");
+            if (in_array('delivery_status', $columns)) {
+                $wpdb->query("DELETE FROM $webhooks_table WHERE delivery_status = 'failed' AND date_created < NOW() - INTERVAL 90 DAY");
+            }
+        }
 
-        // Remove product meta lookup
-        $wpdb->query("TRUNCATE TABLE {$wpdb->prefix}wc_product_meta_lookup");
+        // Check if 'wc_product_meta_lookup' table exists before truncating
+        $product_meta_lookup_table = $wpdb->prefix . "wc_product_meta_lookup";
+        if ($wpdb->get_var("SHOW TABLES LIKE '$product_meta_lookup_table'") == $product_meta_lookup_table) {
+            $wpdb->query("TRUNCATE TABLE $product_meta_lookup_table");
+        }
+
     } catch (Exception $e) {
-        // Log error to WordPress debug log
         error_log('WP & WooCommerce DB Cleaner (WooCommerce Data): ' . $e->getMessage());
     }
 }
+
 
 // Optimize database tables
 function jkmccfw_optimize_tables($wpdb) {
